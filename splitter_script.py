@@ -5,6 +5,7 @@ from PyPDF2 import PdfWriter, PdfReader
 import pandas as pd
 from tkinter import *
 from tkinter import messagebox, ttk
+import pyautogui
 
 # Parse the Excel file
 df = pd.read_excel('XVI. Dürer Verseny - csapatadatok.xlsx')
@@ -110,18 +111,10 @@ class PDFClassifier(Frame):
         self.page_counter = 0
         self.open_pdf()
 
-    def open_pdf(self):
-        # Loop until a page file is found or we run out of pages
-        while self.page_counter < len(inputpdf.pages):
-            try:
-                webbrowser.open(f"document-page{self.page_counter}.pdf")
-                # If the file was successfully opened, break the loop
-                break
-            except Exception as e:
-                # If the file could not be opened, increment the counter and try the next one
-                print(f"Failed to open page {self.page_counter} with error: {e}")
-                self.page_counter += 1
 
+    def open_pdf(self):
+        webbrowser.open(f"document-page{self.page_counter}.pdf")
+        
     def print_contents(self, event):
         team_name = self.contents.get()
         if team_name in teams:
@@ -141,10 +134,26 @@ class PDFClassifier(Frame):
                 print(f"Page {self.page_counter} already classified")
             # Regardless of whether the file was moved, increment the counter and open the next page
             self.page_counter += 1
+            self.entrythingy.after(1000, self.focus_entry)
             self.open_pdf()
         else:
             print("Team name not found.")
 
+    
+
+    def focus_entry(self):
+        x, y, _, _ = self.entrythingy.bbox("end")
+        x += self.entrythingy.winfo_rootx()
+        y += self.entrythingy.winfo_rooty()
+        pyautogui.click(x, y)
+        pyautogui.press('right')  # simulating pressing the right arrow
+
+
+
+
+
+    
+        
             
 
 
@@ -152,4 +161,3 @@ root = Tk()
 pdf_classifier = PDFClassifier(master=root)
 pdf_classifier.mainloop()
 
-#kacsa
