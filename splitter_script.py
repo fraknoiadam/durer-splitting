@@ -14,6 +14,17 @@ df = pd.read_excel('XVI. Dürer Verseny - csapatadatok.xlsx')
 # Create a dictionary of team names (as strings) and IDs
 teams = {str(name): id for name, id in zip(df['Csapatnév'], df['ID'])}
 
+longteams = {
+    str(name): {
+        'id': id,
+        'category': category,
+        'location': location,
+        'first_member_name': first_member_name,
+        'first_member_school': first_member_school
+    } 
+    for name, id, category, location, first_member_name, first_member_school 
+    in zip(df['Csapatnév'], df['ID'], df['Kategória'], df['Helyszín'], df['1. tag neve'], df['1. tag iskolája'])
+}
 
 # Split PDF into separate pages
 inputpdf = PdfReader(open("C5.pdf", "rb"))
@@ -109,7 +120,15 @@ class PDFClassifier(Frame):
         self.contents = self.entrythingy.var
         self.entrythingy.bind('<Key-Return>', self.print_contents)
         self.page_counter = 0
+        self.isfull = False  # Define variable to be changed
+        self.button = ttk.Button(self, text="Csak név", command=self.on_button_click)
+        self.button.pack()
         self.open_pdf()
+
+    def on_button_click(self):
+        self.isfull = not self.isfull  # Toggle the boolean variable on button click
+        # Update the button's text based on the value of self.isfull
+        self.button['text'] = "Teljes infó" if self.isfull else "Csak név"
 
 
     def open_pdf(self):
