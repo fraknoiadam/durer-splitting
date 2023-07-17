@@ -8,23 +8,7 @@ from tkinter import messagebox, ttk
 import pyautogui
 
 # Parse the Excel file
-df = pd.read_excel('XVI. Dürer Verseny - csapatadatok.xlsx')
-
-
-# Create a dictionary of team names (as strings) and IDs
-teams = {str(name): id for name, id in zip(df['Csapatnév'], df['ID'])}
-
-longteams = {
-    str(name): {
-        'id': id,
-        'category': category,
-        'location': location,
-        'first_member_name': first_member_name,
-        'first_member_school': first_member_school
-    } 
-    for name, id, category, location, first_member_name, first_member_school 
-    in zip(df['Csapatnév'], df['ID'], df['Kategória'], df['Helyszín'], df['1. tag neve'], df['1. tag iskolája'])
-}
+teams_df = pd.read_excel('XVI. Dürer Verseny - csapatadatok.xlsx')
 
 # Split PDF into separate pages
 inputpdf = PdfReader(open("C5.pdf", "rb"))
@@ -36,9 +20,9 @@ for i in range(len(inputpdf.pages)):
 
 
 class AutocompleteEntry(ttk.Entry):
-    def __init__(self, autocomplete_list, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._autocomplete_list = sorted(autocomplete_list)
+    def __init__(self, master, autocomplete_list, **kwargs):
+        super().__init__(master, **kwargs)
+        self._autocomplete_list = sorted(autocomplete_list.keys())
         self.var = self["textvariable"]
         if self.var == '':
             self.var = self["textvariable"] = StringVar()
@@ -48,6 +32,7 @@ class AutocompleteEntry(ttk.Entry):
         self.bind("<Up>", self.up)
         self.bind("<Down>", self.down)
         self.listbox_up = False
+        self.master = master
 
     def changed(self, name, index, mode):
         if self.var.get() == '':
@@ -72,7 +57,15 @@ class AutocompleteEntry(ttk.Entry):
                     self.listbox_up = False
 
     def comparison(self):
-        return [w for w in self._autocomplete_list if w.lower().startswith(self.var.get().lower())]
+        # When isfull is True, include additional details in the autocomplete suggestions
+        if self.master.isfull:
+            return [f"{name} ({team_info['category']}, {team_info['location']}, {team_info['first_member_name']}, {team_info['first_member_school']})"
+                    for name, team_info in self.master._autocomplete_list.items()
+                    if name.lower().startswith(self.var.get().lower())]
+        else:
+            # When isfull is False, only include the team name in the autocomplete suggestions
+            return [name for name in self._autocomplete_list if name.lower().startswith(self.var.get().lower())]
+
 
     def selection(self, event):
         if self.listbox_up:
@@ -109,13 +102,34 @@ class AutocompleteEntry(ttk.Entry):
 
 
 
+def construct_autocomplete_list(teams_df):
+    autocomplete_list = {}
+    for _, row in teams_df.iterrows():
+        team_name = row['Csapatnév']
+        category = row['Kategória']
+        location = row['Helyszín']
+        first_member_name = row['1. tag neve']
+        first_member_school = row['1. tag iskolája']
+        id = row['ID']
+        
+        autocomplete_list[str(team_name)] = {
+            'category': category,
+            'location': location,
+            'first_member_name': first_member_name,
+            'first_member_school': first_member_school,
+            'id': id
+        }
+    return autocomplete_list
+
+
+
 class PDFClassifier(Frame):
-    def __init__(self, master=None):
-        Frame.__init__(self, master)
-        self.pack()
-        # Create a list of team names, converting all to strings
-        autocomplete_list = [str(name) for name in teams.keys()]
-        self.entrythingy = AutocompleteEntry(autocomplete_list, master=root)
+    def __init__(self, master, teams_df):
+        super().__init__(master)
+        self.master = master
+        self._autocomplete_list = construct_autocomplete_list(teams_df)
+        self.entrythingy = AutocompleteEntry(self, self._autocomplete_list)
+        self.entrythingy.focus_set()
         self.entrythingy.pack()
         self.contents = self.entrythingy.var
         self.entrythingy.bind('<Key-Return>', self.print_contents)
@@ -130,33 +144,37 @@ class PDFClassifier(Frame):
         # Update the button's text based on the value of self.isfull
         self.button['text'] = "Teljes infó" if self.isfull else "Csak név"
 
-
     def open_pdf(self):
         webbrowser.open(f"document-page{self.page_counter}.pdf")
         
     def print_contents(self, event):
         team_name = self.contents.get()
-        if team_name in teams:
+        if team_name in self._autocomplete_list:
             src_file = f"document-page{self.page_counter}.pdf"
-            team_id = teams[team_name]
-            dst_file = os.path.join(str(team_id), src_file)
+            team_id = self._autocomplete_list[team_name]['id']
+
             # Check if the page file exists before trying to move it
             if os.path.isfile(src_file):
-                if not os.path.exists(str(team_id)):
-                    os.makedirs(str(team_id))
-                # If the destination file already exists, don't try to move
-                if not os.path.exists(dst_file):
+                # Create the team folder if it doesn't exist
+                team_folder = f"{team_id}"
+                if not os.path.exists(team_folder):
+                    os.makedirs(team_folder)
+                
+                # Try moving the file to the team folder. If a file with the same name already exists in the destination,
+                # ignore the error and continue to the next file.
+                dst_file = f"{team_folder}/document-page{self.page_counter}.pdf"
+                if not os.path.isfile(dst_file):
                     shutil.move(src_file, dst_file)
-                else:
-                    print(f"File {dst_file} already exists")
+                
+                # Open the next page in the PDF
+                self.page_counter += 1
+                self.entrythingy.after(1000, self.focus_entry)
+                self.open_pdf()
             else:
                 print(f"Page {self.page_counter} already classified")
-            # Regardless of whether the file was moved, increment the counter and open the next page
-            self.page_counter += 1
-            self.entrythingy.after(1000, self.focus_entry)
-            self.open_pdf()
         else:
             print("Team name not found.")
+
 
     
 
@@ -177,6 +195,7 @@ class PDFClassifier(Frame):
 
 
 root = Tk()
-pdf_classifier = PDFClassifier(master=root)
+pdf_classifier = PDFClassifier(root, teams_df)
+pdf_classifier.pack()
 pdf_classifier.mainloop()
 
